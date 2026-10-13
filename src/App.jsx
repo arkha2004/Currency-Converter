@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./App.css";
 
 function App() {
@@ -11,31 +11,87 @@ function App() {
     from: "",
     to: "",
   });
+  const [exchangeRate, setExchangeRate] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [currencies, setCurrencies] = useState([]);
+  const [apiError, setApiError] = useState("");
 
-  //Creating the object that containing the exchange rates
-  const exchangeRates = {
-    USD: {
-      INR: 83,
-      EUR: 0.92,
-    },
-    EUR: {
-      USD: 1.09,
-      INR: 90,
-    },
-    INR: {
-      USD: 0.012,
-      EUR: 0.011,
-    },
-  };
+  //Fetching the list of currencies available .
+  useEffect(() => {
+    setApiError("");
+    async function fetchCurrencies() {
+      try {
+        const response = await fetch(
+          `https://api.frankfurter.dev/v2/currencies`,
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to Fetch the List of Currencies");
+        }
+
+        const data = await response.json();
+        setCurrencies(data);
+      } catch (err) {
+        setApiError(err.message);
+        console.error(err.message);
+      }
+    }
+
+    fetchCurrencies();
+  }, []);
+
+  //Whenever my to,from value changes i want to fetch data.
+  useEffect(() => {
+    setApiError("");
+    if (!from || !to) {
+      setLoading(false);
+      return;
+    }
+
+    if (from === to) {
+      setExchangeRate(1);
+      setLoading(false);
+      return;
+    }
+
+    const fetchRates = async () => {
+      setLoading(true);
+      // console.log("loading Started");
+      setApiError("");
+
+      try {
+        const response = await fetch(
+          `https://api.frankfurter.dev/v2/rates?base=${from}&quotes=${to}`,
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data = await response.json();
+        // console.log(data[0].rate)
+
+        if (!data.length) {
+          throw new Error("Exchange rate unavailable");
+        }
+
+        setExchangeRate(data[0].rate);
+      } catch (err) {
+        setApiError(err.message);
+        console.log(err.message);
+        setExchangeRate(0);
+        setConvertedAmount(0);
+      } finally {
+        setLoading(false);
+        // console.log("Loading finished ");
+      }
+    };
+
+    fetchRates();
+    // console.log(exchangeRate)
+  }, [from, to]);
 
   //convert func - if the inputAmt is not present don't return any output
   const convert = () => {
-    let exchangeRate = exchangeRates[from][to];
-    console.log(to);
-    console.log(from);
-    if (from === to) {
-      exchangeRate = 1.0;
-    }
     return inputAmount * exchangeRate;
   };
 
@@ -66,6 +122,7 @@ function App() {
     <div className="min-h-screen flex flex-col items-center">
       <h1 className="text-[50px]">Currency Converter</h1>
       <div className="flex gap-4">
+        {/* INPUT AMT */}
         <div className="relative">
           <input
             type="Number"
@@ -85,6 +142,7 @@ function App() {
           )}
         </div>
 
+        {/* FROM */}
         <div className="relative">
           <select
             onChange={(e) => {
@@ -94,9 +152,12 @@ function App() {
             value={from}
           >
             <option value="">From</option>
-            <option value={"USD"}>USD</option>
-            <option value={"EUR"}>EUR</option>
-            <option value={"INR"}>INR</option>
+
+            {currencies.map((currency) => (
+              <option key={currency.iso_code} value={currency.iso_code}>
+                {currency.name}
+              </option>
+            ))}
           </select>
 
           {error.from && (
@@ -106,6 +167,7 @@ function App() {
           )}
         </div>
 
+        {/* TO */}
         <div className="relative">
           <select
             onChange={(e) => {
@@ -115,9 +177,12 @@ function App() {
             value={to}
           >
             <option value="">To</option>
-            <option value={"USD"}>USD</option>
-            <option value={"EUR"}>EUR</option>
-            <option value={"INR"}>INR</option>
+
+            {currencies.map((currency) => (
+              <option key={currency.iso_code} value={currency.iso_code}>
+                {currency.name}
+              </option>
+            ))}
           </select>
 
           {error.to && (
@@ -125,6 +190,7 @@ function App() {
           )}
         </div>
 
+        {/*CONVERT Btn */}
         <button
           className="px-4 py-2 rounded-full bg-black text-white font-bold"
           onClick={() => {
@@ -133,10 +199,12 @@ function App() {
               setConvertedAmount(convert(isValid));
             }
           }}
+          disabled={exchangeRate == 0 ? true : false}
         >
           Convert
         </button>
 
+        {/* DISPAY AMT */}
         <input
           type="text"
           placeholder="Converted Amount"
@@ -145,6 +213,7 @@ function App() {
           readOnly
         />
 
+        {/* SWAP Btn */}
         <button
           onClick={() => {
             swap();
@@ -153,6 +222,13 @@ function App() {
         >
           Swap
         </button>
+      </div>
+
+      {/* Displaying Errors and Loading  */}
+      <div className="fixed bottom-0 left-0 m-4 p-4 bg-blue-500 text-white rounded">
+        {loading && <p>Fetching Exchange Rates...</p>}
+
+        {apiError && <p className="text-red-500">{apiError}</p>}
       </div>
     </div>
   );
